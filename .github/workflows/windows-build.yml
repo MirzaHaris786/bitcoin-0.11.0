@@ -1,4 +1,4 @@
-name: Windows x64 Build
+name: Windows x64 Bitcoin Build
 
 on:
   workflow_dispatch:
@@ -12,10 +12,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup MSYS2 and install packages
+      - name: Setup MSYS2 with MINGW64
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
@@ -28,59 +28,105 @@ jobs:
             mingw-w64-x86_64-libevent
             mingw-w64-x86_64-openssl
             autoconf
-            automake
+            automake-wrapper
             libtool
             pkg-config
             make
+            git
             wget
             tar
             unzip
+            mingw-w64-x86_64-protobuf-c
+            mingw-w64-x86_64-qrencode
 
-      - name: Build Berkeley DB 4.8 (if missing)
+      - name: Build Berkeley DB 4.8
         shell: msys2 {0}
         run: |
           set -e
           cd /tmp
           BDB_VER=4.8.30.NC
-          if [ ! -d /mingw64/include/db_cxx ]; then
-            echo "Downloading BDB ${BDB_VER}"
-            wget -q --show-progress "https://download.oracle.com/berkeley-db/db-${BDB_VER}.tar.gz"
+          if [ ! -f /mingw64/lib/libdb_cxx-4.8.a ]; then
+            echo "Building Berkeley DB ${BDB_VER}"
+            wget -q "http://download.oracle.com/berkeley-db/db-${BDB_VER}.tar.gz"
             tar -xzf db-${BDB_VER}.tar.gz
             cd db-${BDB_VER}/build_unix
-            ../dist/configure --enable-cxx --disable-shared --with-pic --prefix=/mingw64
-            make -j$(nproc)
-            make install
+            ../dist/configure \
+              --enable-cxx \
+              --disable-shared \
+              --disable-replication \
+              --with-pic \
+              --prefix=/mingw64 \
+              --host=x86_64-w64-mingw32
+            make -j$(nproc) && make install
           else
-            echo "BDB already installed"
+            echo "Berkeley DB already installed"
           fi
 
-      - name: Configure & build Bitcoin (x64)
+      - name: Configure build environment
         shell: msys2 {0}
         run: |
-          set -e
-          cd $GITHUB_WORKSPACE/bitcoin-0.11.0
-          ./autogen.sh
-          export CPPFLAGS="-I/mingw64/include"
-          export LDFLAGS="-L/mingw64/lib"
-          ./configure --prefix=/mingw64 --disable-tests --disable-bench
-          make -j$(nproc)
+          export BDB_PREFIX='/mingw64'
+          export BOOST_ROOT='/mingw64'
+          export OPENSSL_ROOT='/mingw64'
+          export CPPFLAGS="-I${BDB_PREFIX}/include"
+          export LDFLAGS="-L${BDB_PREFIX}/lib"
+          export BDB_LIBS="-L${BDB_PREFIX}/lib -ldb_cxx-4.8"
+          export BDB_CFLAGS="-I${BDB_PREFIX}/include"
 
-      - name: Verify build output
+      - name: Run autogen.sh
         shell: msys2 {0}
         run: |
-          echo "Checking if executables exist..."
-          ls -lh src/bitcoind.exe || echo "bitcoind.exe not found"
-          ls -lh src/qt/bitcoin-qt.exe || echo "bitcoin-qt.exe not found"
+          cd $GITHUB_WORKSPACE
+          ./autogen.sh
+
+      - name: Configure Bitcoin Core
+        shell: msys2 {0}
+        run: |
+          cd $GITHUB_WORKSPACE
+          ./configure \
+            --prefix=/mingw64 \
+            --host=x86_64-w64-mingw32 \
+            --with-qt-incdir=/mingw64/include/qt5 \
+            --with-qt-libdir=/mingw64/lib \
+            --with-qt-plugindir=/mingw64/share/qt5/plugins \
+            --with-qt-bindir=/mingw64/bin \
+            --with-boost=/mingw64 \
+            --with-boost-libdir=/mingw64/lib \
+            --with-dbus \
+            --disable-tests \
+            --disable-bench \
+            --disable-man \
+            --disable-zmq \
+            --enable-reduce-exports \
+            --enable-static \
+            --disable-shared
+
+      - name: Build Bitcoin Core
+        shell: msys2 {0}
+        run: |
+          cd $GITHUB_WORKSPACE
+          make -j$(nproc) || make  # Fallback to single thread if parallel fails
+
+      - name: Verify executable files
+        shell: msys2 {0}
+        run: |
+          echo "Checking for built executables..."
+          find . -name "*.exe" -type f | grep -v ".dll" || echo "No .exe files found"
+          ls -la src/bitcoind.exe 2>/dev/null || echo "bitcoind.exe not found"
+          ls -la src/qt/bitcoin-qt.exe 2>/dev/null || echo "bitcoin-qt.exe not found"
+          ls -la src/*.exe 2>/dev/null || echo "No executables in src/"
 
       - name: Collect artifacts
         shell: msys2 {0}
         run: |
           mkdir -p $GITHUB_WORKSPACE/artifacts
-          if [ -f src/bitcoind.exe ]; then cp src/bitcoind.exe $GITHUB_WORKSPACE/artifacts/; fi
-          if [ -f src/qt/bitcoin-qt.exe ]; then cp src/qt/bitcoin-qt.exe $GITHUB_WORKSPACE/artifacts/; fi
+          # Copy all executables
+          find . -name "*.exe" -type f -exec cp {} $GITHUB_WORKSPACE/artifacts/ \;
+          echo "Artifacts collected:"
+          ls -la $GITHUB_WORKSPACE/artifacts/
 
-      - name: Upload artifacts
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: bitcoin-x64-exe
+          name: bitcoin-windows-x64
           path: artifacts/*
