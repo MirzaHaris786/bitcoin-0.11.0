@@ -1,0 +1,77 @@
+.github/workflows/windows-build.yml
+name: Windows x64 Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2 and install packages
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >
+            mingw-w64-x86_64-toolchain
+            base-devel
+            mingw-w64-x86_64-boost
+            mingw-w64-x86_64-qt5
+            mingw-w64-x86_64-libevent
+            mingw-w64-x86_64-openssl
+            autoconf
+            automake
+            libtool
+            pkg-config
+            make
+            wget
+            tar
+            unzip
+
+      - name: Build Berkeley DB 4.8 (if missing)
+        shell: msys2 {0}
+        run: |
+          set -e
+          cd /tmp
+          BDB_VER=4.8.30.NC
+          if [ ! -d /mingw64/include/db_cxx ]; then
+            echo "Downloading BDB ${BDB_VER}"
+            wget -q --show-progress "https://download.oracle.com/berkeley-db/db-${BDB_VER}.tar.gz"
+            tar -xzf db-${BDB_VER}.tar.gz
+            cd db-${BDB_VER}/build_unix
+            ../dist/configure --enable-cxx --disable-shared --with-pic --prefix=/mingw64
+            make -j$(nproc)
+            make install
+          else
+            echo "BDB already installed"
+          fi
+
+      - name: Configure & build Bitcoin (x64)
+        shell: msys2 {0}
+        run: |
+          set -e
+          cd /github/workspace/bitcoin-0.11.0
+          ./autogen.sh
+          export CPPFLAGS="-I/mingw64/include"
+          export LDFLAGS="-L/mingw64/lib"
+          ./configure --prefix=/mingw64 --disable-tests --disable-bench
+          make -j$(nproc)
+
+      - name: Collect artifacts
+        shell: msys2 {0}
+        run: |
+          mkdir -p /github/workspace/artifacts
+          cp src/bitcoind.exe /github/workspace/artifacts/ || true
+          cp src/qt/bitcoin-qt.exe /github/workspace/artifacts/ || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-x64-exe
+          path: artifacts/*
