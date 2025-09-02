@@ -1,14 +1,16 @@
-.github/workflows/windows-build.yml
 name: Windows x64 Build
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
 
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,7 +20,7 @@ jobs:
         with:
           msystem: MINGW64
           update: true
-          install: >
+          install: >-
             mingw-w64-x86_64-toolchain
             base-devel
             mingw-w64-x86_64-boost
@@ -56,7 +58,7 @@ jobs:
         shell: msys2 {0}
         run: |
           set -e
-          cd /github/workspace/bitcoin-0.11.0
+          cd $GITHUB_WORKSPACE/bitcoin-0.11.0
           ./autogen.sh
           export CPPFLAGS="-I/mingw64/include"
           export LDFLAGS="-L/mingw64/lib"
@@ -66,9 +68,9 @@ jobs:
       - name: Collect artifacts
         shell: msys2 {0}
         run: |
-          mkdir -p /github/workspace/artifacts
-          cp src/bitcoind.exe /github/workspace/artifacts/ || true
-          cp src/qt/bitcoin-qt.exe /github/workspace/artifacts/ || true
+          mkdir -p $GITHUB_WORKSPACE/artifacts
+          cp src/bitcoind.exe $GITHUB_WORKSPACE/artifacts/ || true
+          cp src/qt/bitcoin-qt.exe $GITHUB_WORKSPACE/artifacts/ || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
