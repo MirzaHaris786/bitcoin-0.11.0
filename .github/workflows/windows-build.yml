@@ -57,7 +57,7 @@ jobs:
               --with-pic \
               --prefix=/mingw64 \
               --host=x86_64-w64-mingw32
-            make -j$(nproc) && make install
+            make -j4 && make install
           else
             echo "Berkeley DB already installed"
           fi
@@ -105,7 +105,7 @@ jobs:
         shell: msys2 {0}
         run: |
           cd $GITHUB_WORKSPACE
-          make -j$(nproc) || make
+          make -j4 || make
 
       - name: Verify executable files
         shell: msys2 {0}
