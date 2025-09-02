@@ -65,12 +65,19 @@ jobs:
           ./configure --prefix=/mingw64 --disable-tests --disable-bench
           make -j$(nproc)
 
+      - name: Verify build output
+        shell: msys2 {0}
+        run: |
+          echo "Checking if executables exist..."
+          ls -lh src/bitcoind.exe || echo "bitcoind.exe not found"
+          ls -lh src/qt/bitcoin-qt.exe || echo "bitcoin-qt.exe not found"
+
       - name: Collect artifacts
         shell: msys2 {0}
         run: |
           mkdir -p $GITHUB_WORKSPACE/artifacts
-          cp src/bitcoind.exe $GITHUB_WORKSPACE/artifacts/ || true
-          cp src/qt/bitcoin-qt.exe $GITHUB_WORKSPACE/artifacts/ || true
+          if [ -f src/bitcoind.exe ]; then cp src/bitcoind.exe $GITHUB_WORKSPACE/artifacts/; fi
+          if [ -f src/qt/bitcoin-qt.exe ]; then cp src/qt/bitcoin-qt.exe $GITHUB_WORKSPACE/artifacts/; fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
