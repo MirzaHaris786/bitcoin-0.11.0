@@ -33,6 +33,7 @@ jobs:
           wget
           tar
           unzip
+          zip
 
     - name: Build Berkeley DB (patched for Windows)
       shell: msys2 {0}
@@ -55,16 +56,18 @@ jobs:
         ./configure --prefix=/mingw64 --disable-tests --disable-bench
         make -j$(nproc)
 
-    - name: Collect executables
+    - name: Package executables
       shell: msys2 {0}
       run: |
         mkdir -p artifacts
         cp src/bitcoind.exe artifacts/ || true
         cp src/qt/bitcoin-qt.exe artifacts/ || true
-        ls -la artifacts/
+        cd artifacts
+        zip bitcoin-build.zip *.exe
+        ls -lh
 
-    - name: Upload artifacts
+    - name: Upload artifact (zip)
       uses: actions/upload-artifact@v4
       with:
-        name: bitcoin-exe
-        path: artifacts/*
+        name: bitcoin-x64-build
+        path: artifacts/bitcoin-build.zip
