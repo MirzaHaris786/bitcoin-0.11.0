@@ -34,15 +34,15 @@ jobs:
           tar
           unzip
 
-    - name: Build Berkeley DB
+    - name: Build Berkeley DB (patched for Windows)
       shell: msys2 {0}
       run: |
         cd /tmp
-        wget http://download.oracle.com/berkeley-db/db-4.8.30.NC.tar.gz
+        curl -L -o db-4.8.30.NC.tar.gz https://download.oracle.com/berkeley-db/db-4.8.30.NC.tar.gz
         tar -xzf db-4.8.30.NC.tar.gz
         cd db-4.8.30.NC/build_unix
-        ../dist/configure --enable-cxx --disable-shared --with-pic --prefix=/mingw64
-        make -j4
+        ../dist/configure --enable-mingw --enable-cxx --disable-shared --with-mutex=windows --with-pic --prefix=/mingw64
+        make -j$(nproc)
         make install
 
     - name: Build Bitcoin
@@ -50,13 +50,15 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE
         ./autogen.sh
+        export CPPFLAGS="-I/mingw64/include"
+        export LDFLAGS="-L/mingw64/lib"
         ./configure --prefix=/mingw64 --disable-tests --disable-bench
-        make -j4
+        make -j$(nproc)
 
     - name: Collect executables
       shell: msys2 {0}
       run: |
-        mkdir artifacts
+        mkdir -p artifacts
         cp src/bitcoind.exe artifacts/ || true
         cp src/qt/bitcoin-qt.exe artifacts/ || true
         ls -la artifacts/
